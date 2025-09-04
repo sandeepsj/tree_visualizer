@@ -1,0 +1,566 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Interactive Tree Visualizer</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <style>
+        body {
+            font-family: 'Inter', sans-serif;
+            overscroll-behavior: none;
+        }
+        .tool-btn.active {
+            background-color: #4f46e5;
+            color: white;
+            box-shadow: 0 4px 6px -1px rgb(0 0 0 / 0.1), 0 2px 4px -2px rgb(0 0 0 / 0.1);
+        }
+        #canvas {
+            background-color: #f3f4f6;
+        }
+        .node-input, .note-textarea {
+            background-color: transparent;
+            border: none;
+            outline: none;
+            padding: 4px;
+            box-sizing: border-box;
+            color: #1f2937;
+        }
+        .node-input {
+            font-weight: 500;
+            text-align: center;
+            width: 100%;
+            height: 100%;
+            resize: none;
+        }
+        .note-textarea {
+            font-size: 12px;
+            text-align: left;
+            resize: both;
+            overflow: auto;
+        }
+        .node-circle {
+            transition: filter 0.2s ease-in-out, stroke-width 0.2s ease-in-out;
+        }
+        .node-circle.selected {
+            stroke-width: 4px;
+            stroke: #4f46e5;
+            filter: drop-shadow(0 4px 6px rgba(0,0,0,0.15));
+        }
+    </style>
+</head>
+<body class="h-screen w-screen overflow-hidden flex flex-col bg-gray-800 text-gray-800">
+
+    <!-- Toolbar -->
+    <header class="bg-white shadow-md z-10 p-2">
+        <div class="container mx-auto flex items-center justify-between gap-4 flex-wrap">
+            <h1 class="text-xl font-bold text-gray-700 hidden sm:block">Tree Visualizer</h1>
+            
+            <!-- Tools -->
+            <div id="tools" class="flex items-center gap-2 bg-gray-100 p-1 rounded-lg">
+                <button data-tool="select" class="tool-btn active flex items-center gap-2 px-3 py-1.5 text-sm font-medium rounded-md transition-all duration-200" title="Select/Move Tool (V)">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 14a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h10l6 6v4z"></path></svg>
+                    Select
+                </button>
+                <button data-tool="create" class="tool-btn flex items-center gap-2 px-3 py-1.5 text-sm font-medium rounded-md transition-all duration-200" title="Create Node (N)">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><line x1="12" y1="2" x2="12" y2="5"/><line x1="12" y1="19" x2="12" y2="22"/><line x1="2" y1="12" x2="5" y2="12"/><line x1="19" y1="12" x2="22" y2="12"/></svg>
+                    Create
+                </button>
+                <button data-tool="delete" class="tool-btn flex items-center gap-2 px-3 py-1.5 text-sm font-medium rounded-md transition-all duration-200" title="Delete Node (D)">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path></svg>
+                    Delete
+                </button>
+                <button data-tool="note" class="tool-btn flex items-center gap-2 px-3 py-1.5 text-sm font-medium rounded-md transition-all duration-200" title="Add Note (A)">
+                     <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15.5 3H5a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V8.5L15.5 3Z"></path><path d="M15 3v6h6"></path></svg>
+                    Note
+                </button>
+            </div>
+
+            <!-- Color Palette -->
+            <div id="color-palette" class="flex items-center gap-2">
+                <button data-color="#FFFFFF" class="w-6 h-6 rounded-full border-2 border-gray-300 bg-white" title="White"></button>
+                <button data-color="#fecaca" class="w-6 h-6 rounded-full border-2 border-gray-300 bg-red-200" title="Red"></button>
+                <button data-color="#bbf7d0" class="w-6 h-6 rounded-full border-2 border-gray-300 bg-green-200" title="Green"></button>
+                <button data-color="#bfdbfe" class="w-6 h-6 rounded-full border-2 border-gray-300 bg-blue-200" title="Blue"></button>
+                <button data-color="#fef08a" class="w-6 h-6 rounded-full border-2 border-gray-300 bg-yellow-200" title="Yellow"></button>
+            </div>
+
+            <!-- Actions -->
+            <div class="flex items-center gap-2">
+                <button id="undo-btn" class="flex items-center gap-2 px-3 py-1.5 text-sm font-medium bg-gray-100 rounded-md transition-all duration-200 hover:bg-gray-200" title="Undo (Ctrl+Z)">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 7v6h-6"></path><path d="M3 17a9 9 0 0 1 9-9 9 9 0 0 1 6 2.3l-3 2.7"></path></svg>
+                    Undo
+                </button>
+                <button id="learn-btn" class="flex items-center gap-2 px-3 py-1.5 text-sm font-medium bg-blue-100 text-blue-700 rounded-md transition-all duration-200 hover:bg-blue-200" title="How to use">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"></path><line x1="12" y1="17" x2="12.01" y2="17"></line></svg>
+                    Learn
+                </button>
+            </div>
+        </div>
+    </header>
+
+    <!-- Main Canvas -->
+    <main class="flex-grow w-full h-full">
+        <svg id="canvas" class="w-full h-full"></svg>
+    </main>
+
+    <!-- Help Modal -->
+    <div id="help-modal" class="hidden fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 transition-opacity duration-300">
+        <div class="bg-white p-8 rounded-lg shadow-2xl max-w-3xl w-full m-4 transform transition-transform duration-300 scale-95">
+            <div class="flex justify-between items-center mb-4">
+                <h2 class="text-2xl font-bold text-gray-800">How to Use the Tree Visualizer</h2>
+                <button id="close-modal-btn" class="text-gray-500 hover:text-gray-800 transition-colors">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
+                </button>
+            </div>
+            <div class="space-y-4 text-gray-600 max-h-[70vh] overflow-y-auto pr-4">
+                <div>
+                    <h3 class="font-semibold text-lg text-gray-700 mb-1">Tools</h3>
+                    <ul class="list-disc list-inside space-y-2">
+                        <li><strong class="font-medium text-indigo-600">Select (V):</strong> The default tool. Click a node to select it. Click and drag a selected node to move it around the canvas.</li>
+                        <li><strong class="font-medium text-indigo-600">Create (N):</strong> Click on an empty area of the canvas to create a new root node. Click on an existing node to create a child for it. You must enter a unique ID for the new node.</li>
+                        <li><strong class="font-medium text-indigo-600">Delete (D):</strong> Click on any node to delete it and its entire subtree (all of its children, grandchildren, etc.).</li>
+                        <li><strong class="font-medium text-indigo-600">Note (A):</strong> Click on a node to add or edit a text note. The note box is resizable by dragging its bottom-right corner.</li>
+                    </ul>
+                </div>
+                <div>
+                    <h3 class="font-semibold text-lg text-gray-700 mb-1">Other Features</h3>
+                    <ul class="list-disc list-inside space-y-2">
+                        <li><strong class="font-medium">Color Palette:</strong> First, select a node using the 'Select' tool. Then, click on any color swatch in the toolbar to change the selected node's color.</li>
+                        <li><strong class="font-medium">Undo (Ctrl+Z):</strong> Reverts the last action you made, such as creating, deleting, moving, or coloring a node.</li>
+                        <li><strong class="font-medium">Keyboard Shortcuts:</strong>
+                            <ul class="list-['-_'] list-inside ml-4 mt-1 space-y-1">
+                                <li>Switch between tools using their first letter: 'V' (Select), 'N' (Create), 'D' (Delete), 'A' (Note).</li>
+                                <li>Press <strong class="font-mono bg-gray-200 px-1.5 py-0.5 rounded">Delete</strong> or <strong class="font-mono bg-gray-200 px-1.5 py-0.5 rounded">Backspace</strong> to delete a selected node.</li>
+                            </ul>
+                        </li>
+                    </ul>
+                </div>
+            </div>
+        </div>
+    </div>
+
+
+    <script>
+        document.addEventListener('DOMContentLoaded', () => {
+            const canvas = document.getElementById('canvas');
+            const toolsContainer = document.getElementById('tools');
+            const colorPalette = document.getElementById('color-palette');
+            const undoBtn = document.getElementById('undo-btn');
+            const learnBtn = document.getElementById('learn-btn');
+            const helpModal = document.getElementById('help-modal');
+            const closeModalBtn = document.getElementById('close-modal-btn');
+            const modalContent = helpModal.querySelector('div');
+
+
+            const NODE_RADIUS = 35;
+            const NOTE_WIDTH = 80;
+            const NOTE_HEIGHT = 40;
+
+            let state = {
+                nodes: [],
+                activeTool: 'select',
+                selectedNodeId: null,
+                isDragging: false,
+                dragStart: { x: 0, y: 0 },
+            };
+
+            let history = [];
+
+            const saveState = () => {
+                history.push(JSON.parse(JSON.stringify(state.nodes.filter(n => !n.isTemporary))));
+                if (history.length > 50) { 
+                    history.shift();
+                }
+            };
+            
+            const undo = () => {
+                if (history.length > 1) {
+                    history.pop();
+                    state.nodes = JSON.parse(JSON.stringify(history[history.length - 1]));
+                    state.selectedNodeId = null;
+                    render();
+                }
+            };
+
+            const getCanvasCoords = (e) => {
+                const svg = canvas.getBoundingClientRect();
+                return {
+                    x: e.clientX - svg.left,
+                    y: e.clientY - svg.top
+                };
+            };
+
+            const findNodeById = id => state.nodes.find(n => n.id === id);
+            
+            const deleteSubtree = (nodeId) => {
+                let nodesToDelete = [nodeId];
+                let queue = [nodeId];
+
+                while (queue.length > 0) {
+                    const currentId = queue.shift();
+                    const children = state.nodes.filter(n => n.parentId === currentId);
+                    for (const child of children) {
+                        nodesToDelete.push(child.id);
+                        queue.push(child.id);
+                    }
+                }
+                
+                state.nodes = state.nodes.filter(n => !nodesToDelete.includes(n.id));
+            };
+            
+            const createTemporaryNoteEditor = (node) => {
+                // This function now only creates the editor, render() places it
+                const noteEditor = {
+                    nodeId: node.id,
+                    x: node.x + NODE_RADIUS + 10,
+                    y: node.y - (node.noteHeight || NOTE_HEIGHT) / 2,
+                    width: node.noteWidth || NOTE_WIDTH,
+                    height: node.noteHeight || NOTE_HEIGHT,
+                    value: node.note || ''
+                };
+                state.activeNoteEditor = noteEditor;
+                render();
+            };
+
+            const render = () => {
+                canvas.innerHTML = ''; // Clear canvas
+
+                // Render edges first
+                state.nodes.forEach(node => {
+                    if (node.parentId && !node.isTemporary) {
+                        const parent = findNodeById(node.parentId);
+                        if (parent) {
+                            const line = document.createElementNS('http://www.w3.org/2000/svg', 'line');
+                            line.setAttribute('x1', parent.x);
+                            line.setAttribute('y1', parent.y);
+                            line.setAttribute('x2', node.x);
+                            line.setAttribute('y2', node.y);
+                            line.setAttribute('stroke', '#9ca3af');
+                            line.setAttribute('stroke-width', '2');
+                            canvas.appendChild(line);
+                        }
+                    }
+                });
+                
+                // Render nodes
+                state.nodes.forEach(node => {
+                    if (node.isTemporary) {
+                        // RENDER TEMPORARY INPUT NODE
+                        const group = document.createElementNS('http://www.w3.org/2000/svg', 'g');
+                        group.setAttribute('transform', `translate(${node.x}, ${node.y})`);
+
+                        const tempCircle = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
+                        tempCircle.setAttribute('cx', 0);
+                        tempCircle.setAttribute('cy', 0);
+                        tempCircle.setAttribute('r', NODE_RADIUS);
+                        tempCircle.setAttribute('fill', '#ffffff');
+                        tempCircle.setAttribute('stroke', '#a5b4fc');
+                        tempCircle.setAttribute('stroke-width', '2');
+                        tempCircle.setAttribute('stroke-dasharray', '6 4');
+                        group.appendChild(tempCircle);
+
+                        const foreignObject = document.createElementNS('http://www.w3.org/2000/svg', 'foreignObject');
+                        foreignObject.setAttribute('x', -NODE_RADIUS);
+                        foreignObject.setAttribute('y', -NODE_RADIUS);
+                        foreignObject.setAttribute('width', NODE_RADIUS * 2);
+                        foreignObject.setAttribute('height', NODE_RADIUS * 2);
+
+                        const input = document.createElement('input');
+                        input.type = 'text';
+                        input.className = 'node-input';
+                        input.placeholder = "ID...";
+                        input.id = 'temp-node-input'; // Predictable ID for focusing
+
+                        const finalizeNode = () => {
+                            const newId = input.value.trim();
+                            const tempNodeIndex = state.nodes.findIndex(n => n.id === node.id);
+                            if (tempNodeIndex === -1) return;
+
+                            if (newId && !findNodeById(newId)) {
+                                const finalizedNode = state.nodes[tempNodeIndex];
+                                finalizedNode.id = newId;
+                                delete finalizedNode.isTemporary;
+                                saveState();
+                            } else {
+                                state.nodes.splice(tempNodeIndex, 1);
+                            }
+                            render();
+                        };
+
+                        input.addEventListener('blur', finalizeNode);
+                        input.addEventListener('keydown', e => {
+                            if (e.key === 'Enter') input.blur();
+                            if (e.key === 'Escape') {
+                                const tempNodeIndex = state.nodes.findIndex(n => n.id === node.id);
+                                if (tempNodeIndex > -1) state.nodes.splice(tempNodeIndex, 1);
+                                render();
+                            }
+                        });
+                        
+                        foreignObject.appendChild(input);
+                        group.appendChild(foreignObject);
+                        canvas.appendChild(group);
+
+                        setTimeout(() => input.focus(), 0);
+
+                    } else {
+                        // RENDER NORMAL NODE
+                        const group = document.createElementNS('http://www.w3.org/2000/svg', 'g');
+                        group.setAttribute('transform', `translate(${node.x}, ${node.y})`);
+                        group.dataset.id = node.id;
+
+                        const circle = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
+                        circle.setAttribute('cx', 0);
+                        circle.setAttribute('cy', 0);
+                        circle.setAttribute('r', NODE_RADIUS);
+                        circle.setAttribute('fill', node.color);
+                        circle.setAttribute('stroke', '#6b7280');
+                        circle.setAttribute('stroke-width', '2');
+                        circle.classList.add('node-circle');
+                        if(node.id === state.selectedNodeId) circle.classList.add('selected');
+                        group.appendChild(circle);
+
+                        const text = document.createElementNS('http://www.w3.org/2000/svg', 'text');
+                        text.setAttribute('x', 0);
+                        text.setAttribute('y', 5);
+                        text.setAttribute('text-anchor', 'middle');
+                        text.setAttribute('fill', '#1f2937');
+                        text.style.fontWeight = '500';
+                        text.style.pointerEvents = 'none';
+                        text.textContent = node.id;
+                        group.appendChild(text);
+                        
+                        if (node.note) {
+                            const noteGroup = document.createElementNS('http://www.w3.org/2000/svg', 'g');
+                            noteGroup.setAttribute('transform', `translate(${NODE_RADIUS + 10}, ${-(node.noteHeight || NOTE_HEIGHT) / 2})`);
+                            const fo = document.createElementNS('http://www.w3.org/2000/svg', 'foreignObject');
+                            fo.setAttribute('width', node.noteWidth || NOTE_WIDTH);
+                            fo.setAttribute('height', node.noteHeight || NOTE_HEIGHT);
+                            const noteDiv = document.createElement('div');
+                            noteDiv.className = 'w-full h-full p-2 bg-yellow-100 rounded-md shadow-md border border-yellow-300 text-xs text-gray-700 overflow-y-auto';
+                            noteDiv.innerText = node.note;
+                            fo.appendChild(noteDiv);
+                            noteGroup.appendChild(fo);
+                            group.appendChild(noteGroup);
+                        }
+                        canvas.appendChild(group);
+                    }
+                });
+
+                // Render active note editor
+                if (state.activeNoteEditor) {
+                    const editor = state.activeNoteEditor;
+                    const fo = document.createElementNS('http://www.w3.org/2000/svg', 'foreignObject');
+                    fo.setAttribute('x', editor.x);
+                    fo.setAttribute('y', editor.y);
+                    // Use a large, fixed-size container to allow the textarea to be resized within it
+                    fo.setAttribute('width', 400);
+                    fo.setAttribute('height', 300);
+
+                    const textarea = document.createElement('textarea');
+                    textarea.className = 'note-textarea p-2 bg-yellow-100 rounded-md shadow-md border border-yellow-300';
+                    textarea.value = editor.value;
+                    // Set the initial size of the textarea
+                    textarea.style.width = `${editor.width}px`;
+                    textarea.style.height = `${editor.height}px`;
+
+                    const finalizeNote = () => {
+                        const node = findNodeById(editor.nodeId);
+                        if (node) {
+                            node.note = textarea.value;
+                            node.noteWidth = parseInt(textarea.style.width, 10);
+                            node.noteHeight = parseInt(textarea.style.height, 10);
+                            saveState();
+                        }
+                        delete state.activeNoteEditor;
+                        render();
+                    };
+
+                    textarea.addEventListener('blur', finalizeNote);
+                    textarea.addEventListener('keydown', e => { if(e.key === 'Escape') textarea.blur(); });
+                    fo.appendChild(textarea);
+                    canvas.appendChild(fo);
+                    setTimeout(() => textarea.focus(), 0);
+                }
+
+                // Update toolbar UI
+                toolsContainer.querySelectorAll('.tool-btn').forEach(btn => {
+                    btn.classList.toggle('active', btn.dataset.tool === state.activeTool);
+                });
+            };
+
+            // --- Event Listeners ---
+
+            toolsContainer.addEventListener('click', e => {
+                const toolBtn = e.target.closest('.tool-btn');
+                if (toolBtn) {
+                    state.activeTool = toolBtn.dataset.tool;
+                    state.selectedNodeId = null;
+                    render();
+                }
+            });
+
+            canvas.addEventListener('mousedown', e => {
+                // If the click is on the textarea (e.g., to resize it), do nothing.
+                if (e.target.classList.contains('note-textarea')) {
+                    return;
+                }
+
+                state.nodes = state.nodes.filter(n => !n.isTemporary);
+                if (state.activeNoteEditor) {
+                    const node = findNodeById(state.activeNoteEditor.nodeId);
+                    const editorElement = document.querySelector('.note-textarea');
+                    if(node && editorElement) node.note = editorElement.value;
+                    delete state.activeNoteEditor;
+                    saveState();
+                }
+
+                const coords = getCanvasCoords(e);
+                const targetNodeGroup = e.target.closest('g');
+
+                if (targetNodeGroup) {
+                    const nodeId = targetNodeGroup.dataset.id;
+                    // If a group without an ID is clicked (like the temp input node), stop.
+                    if (!nodeId) {
+                        return;
+                    }
+                    const node = findNodeById(nodeId);
+
+                    // If a node can't be found in the state from the ID, stop.
+                    if (!node) {
+                        return;
+                    }
+
+                    switch (state.activeTool) {
+                        case 'select':
+                            state.selectedNodeId = nodeId;
+                            state.isDragging = true;
+                            state.dragStart = { x: coords.x - node.x, y: coords.y - node.y };
+                            break;
+                        case 'create':
+                            state.nodes.push({
+                                id: `temp_${Date.now()}`,
+                                x: node.x, y: node.y + NODE_RADIUS * 2.5,
+                                parentId: nodeId, isTemporary: true, color: '#FFFFFF', note: ''
+                            });
+                            break;
+                        case 'delete':
+                            deleteSubtree(nodeId);
+                            saveState();
+                            state.selectedNodeId = null;
+                            break;
+                        case 'note':
+                            createTemporaryNoteEditor(node);
+                            break;
+                    }
+                } else {
+                    state.selectedNodeId = null;
+                    if (state.activeTool === 'create') {
+                        state.nodes.push({
+                            id: `temp_${Date.now()}`,
+                            x: coords.x, y: coords.y,
+                            parentId: null, isTemporary: true, color: '#FFFFFF', note: ''
+                        });
+                    }
+                }
+                render();
+            });
+
+            canvas.addEventListener('mousemove', e => {
+                if (state.isDragging && state.selectedNodeId) {
+                    const coords = getCanvasCoords(e);
+                    const node = findNodeById(state.selectedNodeId);
+                    if (node) {
+                        node.x = coords.x - state.dragStart.x;
+                        node.y = coords.y - state.dragStart.y;
+                        render();
+                    }
+                }
+            });
+
+            canvas.addEventListener('mouseup', () => {
+                if (state.isDragging) {
+                    state.isDragging = false;
+                    saveState();
+                }
+            });
+            
+            canvas.addEventListener('mouseleave', () => {
+                 if (state.isDragging) {
+                    state.isDragging = false;
+                    saveState();
+                }
+            });
+
+            colorPalette.addEventListener('click', e => {
+                const colorBtn = e.target.closest('button');
+                if (colorBtn && state.selectedNodeId) {
+                    const node = findNodeById(state.selectedNodeId);
+                    if (node) {
+                        node.color = colorBtn.dataset.color;
+                        saveState();
+                        render();
+                    }
+                }
+            });
+            
+            undoBtn.addEventListener('click', undo);
+
+            const openModal = () => {
+                helpModal.classList.remove('hidden');
+                setTimeout(() => {
+                    helpModal.classList.add('opacity-100');
+                    modalContent.classList.remove('scale-95');
+                }, 10);
+            };
+
+            const closeModal = () => {
+                helpModal.classList.remove('opacity-100');
+                modalContent.classList.add('scale-95');
+                setTimeout(() => {
+                    helpModal.classList.add('hidden');
+                }, 300);
+            };
+
+            learnBtn.addEventListener('click', openModal);
+            closeModalBtn.addEventListener('click', closeModal);
+            helpModal.addEventListener('click', e => {
+                if (e.target === helpModal) {
+                    closeModal();
+                }
+            });
+
+            window.addEventListener('keydown', e => {
+                 if (e.key === 'Escape' && !helpModal.classList.contains('hidden')) {
+                    closeModal();
+                    return;
+                }
+                const isTyping = document.activeElement.tagName === 'INPUT' || document.activeElement.tagName === 'TEXTAREA';
+                if(isTyping) return;
+
+                if (e.key.toLowerCase() === 'v') state.activeTool = 'select';
+                if (e.key.toLowerCase() === 'n') state.activeTool = 'create';
+                if (e.key.toLowerCase() === 'd') state.activeTool = 'delete';
+                if (e.key.toLowerCase() === 'a') state.activeTool = 'note';
+                
+                if ((e.key === 'Delete' || e.key === 'Backspace') && state.selectedNodeId) {
+                    deleteSubtree(state.selectedNodeId);
+                    saveState();
+                    state.selectedNodeId = null;
+                }
+                if (e.ctrlKey && e.key.toLowerCase() === 'z') {
+                    undo();
+                }
+
+                render();
+            });
+            
+            saveState();
+            render();
+        });
+    </script>
+</body>
+</html>
+
