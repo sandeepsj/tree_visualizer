@@ -169,17 +169,23 @@
             let history = [];
 
             const saveState = () => {
-                history.push(JSON.parse(JSON.stringify(state.nodes.filter(n => !n.isTemporary))));
+                const nodesToSave = state.nodes.filter(n => !n.isTemporary);
+                history.push(JSON.parse(JSON.stringify(nodesToSave)));
                 if (history.length > 50) { 
                     history.shift();
                 }
+                // Save the current state to localStorage
+                localStorage.setItem('treeVisualizerState', JSON.stringify(nodesToSave));
             };
             
             const undo = () => {
                 if (history.length > 1) {
                     history.pop();
-                    state.nodes = JSON.parse(JSON.stringify(history[history.length - 1]));
+                    const restoredNodes = JSON.parse(JSON.stringify(history[history.length - 1]));
+                    state.nodes = restoredNodes;
                     state.selectedNodeId = null;
+                    // Also save the restored state to localStorage
+                    localStorage.setItem('treeVisualizerState', JSON.stringify(restoredNodes));
                     render();
                 }
             };
@@ -557,6 +563,12 @@
                 render();
             });
             
+            // Load state from localStorage on startup
+            const savedTree = localStorage.getItem('treeVisualizerState');
+            if (savedTree) {
+                state.nodes = JSON.parse(savedTree);
+            }
+
             saveState();
             render();
         });
